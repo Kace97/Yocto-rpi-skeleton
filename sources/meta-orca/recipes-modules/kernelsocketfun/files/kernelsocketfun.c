@@ -32,11 +32,39 @@ static void ksf_postdoit(const struct genl_ops *ops,
     pr_info("we ran a command woohoo\n");
 }
 
+static const struct nla_policy ksf_log_message_policy[KSF_ATTR_MAX] = {
+    [KSF_KERNEL_LOG_MESSAGE] = {.type = NLA_NUL_STRING},
+};
+
 static int ksf_hello(struct sk_buff *skb, struct genl_info *info)
 {
     pr_info("hello, I'm just a mere example command\n");
     return 0;
 }
+
+static int ksf_log_message(struct sk_buff *skb, struct genl_info *info) {
+    char* log_message;
+    void* hdr;
+    struct sk_buff* out_skb;
+    int err;
+
+    if(!info->attrs[KSF_KERNEL_LOG_MESSAGE])
+    {
+        pr_warn("Message didn't have all required attributes.\n");
+        return -1;
+    }
+
+    log_message = (char*)nla_data(info->attrs[KSF_KERNEL_LOG_MESSAGE]);
+
+    pr_info("Hello our lil module has received a request to log a message.");
+    pr_info("mesage to be logged is: %s", log_message);
+
+    return 0;
+}
+
+// static const struct nla_policy ksf_dump_secret_message_policy[KSF_ATTR_MAX] = {
+//     [KSF_MESSAGE_SELECT] = {.type = NLA_U8}
+// };
 
 // the ops array is how we define the API to be leveraged by the userspace
 static const struct genl_ops ksf_ops[] = {
@@ -44,6 +72,16 @@ static const struct genl_ops ksf_ops[] = {
         .cmd = KSF_CMD_HELLO,
         .doit = ksf_hello,
     },
+    {
+        .cmd = KSF_LOG_MESSAGE,
+        .policy = ksf_log_message_policy,
+        .doit = ksf_log_message,
+    },
+    // {   .cmd = KSF_GET_SECRET_MESSAGE,
+    //     .policy = ksf_dump_secret_message_policy,
+    //     // .doit = ,
+    //     .dumpit = ksf_dump_secret_message,
+    // },
 };
 
 // here is where we will make our genl family
@@ -58,11 +96,53 @@ static struct genl_family ksf_fam = {
     .module = THIS_MODULE, // Seems like this would basically always be true
 };
 
+// static int ksf_dump_secret_message(struct sk_buff *skb, struct genl_info *info) {
+//     void* hdr;
+
+//     char* carSecret = "The car has no wheels...";
+//     char* computerSecret = "The computer has no memory....";
+
+//     hdr = genlmsg_put(skb, info->snd_portid, info->snd_seq, &ksf_fam, 0, KSF_MESSAGE_DUMP);
+//     if(IS_ERR(hdr))
+//     {
+//         pr_err("Failed to create message header.\n");
+//         return PTR_ERR(hdr);
+//     }
+
+//     if (!info->attrs[KSF_MESSAGE_SELECT])
+//     {
+//         pr_warn("Message didn't have all required attributes.\n");
+//         return -1;
+//     }
+
+
+//     if(info->attrs[KSF_MESSAGE_SELECT] == KSF_COMPUTER_SECRET)
+//     {
+//         pr_info("Computer Secret Selected\n");
+//         NLA_PUT_STRING(skb, KSF_SECRET_MESSAGE, computerSecret);
+//     }
+//     else
+//     {
+//         pr_info("Car Secret Selected\n");
+//         NLA_PUT_STRING(skb, KSF_SECRET_MESSAGE, carSecret);
+//     }
+//     return genlmsg_reply(skb, info)
+// }
+
+// static struct genl_multicast_group ksf_multicast_group = {
+//     .name = KSF_GENL_GROUP
+// }
+
 static int __init ksf_initialize(void) {
     pr_info("initializing netlink family\n");
-    int err = genl_register_family(&ksf_fam);
+    int err;
+    err = genl_register_family(&ksf_fam);
     if (err)
+    {
+        pr_err("Failed to initialize ksf_fam.\n");
         return err;
+    }
+    pr_info("ksf_fam initialized.\n");
     return 0;
 }
 
