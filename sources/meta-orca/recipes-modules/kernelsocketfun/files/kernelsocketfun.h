@@ -12,7 +12,7 @@ enum ksf_commands {
     KSF_LOG_MESSAGE,
     KSF_GET_SECRET_MESSAGE,
 
-    KSF_MESSAGE_DUMP,
+    KSF_MESSAGE_GET,
     KSF_MESSAGE_LOGGED,
 
     __KSF_CMD_AFTER_LAST,
@@ -32,11 +32,8 @@ enum ksf_attrs {
 };
 
 enum ksf_message_select {
+    KSF_SECRET_UNSPEC,
     KSF_CAR_SECRET,
     KSF_COMPUTER_SECRET,
     KSF_MESSAGE_UNDEF,
 };
-
-// static int ksf_hello(struct sk_buff *skb, struct genl_info *info);
-// static int ksf_log_message(struct sk_buff *skb, struct genl_info *info);
-// static int ksf_dump_secret_message(struct sk_buff *skb, struct genl_info *info);

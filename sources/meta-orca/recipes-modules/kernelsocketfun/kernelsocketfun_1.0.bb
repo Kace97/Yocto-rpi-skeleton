@@ -7,6 +7,7 @@ inherit module
 
 SRC_URI =   "file://kernelsocketfun.c \
             file://kernelsocketfun.h \
+            file://ksf.h \
             file://Makefile \
             "
 

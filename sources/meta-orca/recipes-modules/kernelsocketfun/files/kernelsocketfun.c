@@ -13,6 +13,7 @@
 
 // My includes
 #include "kernelsocketfun.h"
+#include "ksf.h"
 
 
 // This gets called before any of the 'doit' operations defined inside of our ops
@@ -36,6 +37,39 @@ static const struct nla_policy ksf_log_message_policy[KSF_ATTR_MAX] = {
     [KSF_KERNEL_LOG_MESSAGE] = {.type = NLA_NUL_STRING},
 };
 
+static const struct nla_policy ksf_get_secret_message_policy[KSF_ATTR_MAX] = {
+    [KSF_MESSAGE_SELECT] = {.type = NLA_U8}
+};
+
+// the ops array is how we define the API to be leveraged by the userspace
+static const struct genl_ops ksf_ops[] = {
+    {
+        .cmd = KSF_CMD_HELLO,
+        .doit = ksf_hello,
+    },
+    {
+        .cmd = KSF_LOG_MESSAGE,
+        .policy = ksf_log_message_policy,
+        .doit = ksf_log_message,
+    },
+    {   .cmd = KSF_GET_SECRET_MESSAGE,
+        .policy = ksf_get_secret_message_policy,
+        .doit = ksf_get_secret_message,
+    },
+};
+
+// here is where we will make our genl family
+static struct genl_family ksf_fam = {
+    .name = KSF_GENL_NAME, // This should have us generate and assign a unique id for this family automatically
+    .hdrsize = 0,
+    .n_ops = ARRAY_SIZE(ksf_ops),
+    .maxattr = KSF_ATTR_MAX,
+    .ops = ksf_ops,
+    .pre_doit = ksf_predoit,
+    .post_doit = ksf_postdoit,
+    .module = THIS_MODULE, // Seems like this would basically always be true
+};
+
 static int ksf_hello(struct sk_buff *skb, struct genl_info *info)
 {
     pr_info("hello, I'm just a mere example command\n");
@@ -44,9 +78,6 @@ static int ksf_hello(struct sk_buff *skb, struct genl_info *info)
 
 static int ksf_log_message(struct sk_buff *skb, struct genl_info *info) {
     char* log_message;
-    void* hdr;
-    struct sk_buff* out_skb;
-    int err;
 
     if(!info->attrs[KSF_KERNEL_LOG_MESSAGE])
     {
@@ -62,80 +93,71 @@ static int ksf_log_message(struct sk_buff *skb, struct genl_info *info) {
     return 0;
 }
 
-// static const struct nla_policy ksf_dump_secret_message_policy[KSF_ATTR_MAX] = {
-//     [KSF_MESSAGE_SELECT] = {.type = NLA_U8}
-// };
+static int ksf_get_secret_message(struct sk_buff *skb, struct genl_info *info) {
+    void* hdr;
+    int message_select;
+    struct nlattr **attrs = info->attrs;
+    char* carSecret = "The car has no wheels...";
+    char* computerSecret = "The computer has no memory....";
+    struct sk_buff *msg;
 
-// the ops array is how we define the API to be leveraged by the userspace
-static const struct genl_ops ksf_ops[] = {
+    if(IS_ERR(hdr))
     {
-        .cmd = KSF_CMD_HELLO,
-        .doit = ksf_hello,
-    },
+        pr_err("Failed to create message header.\n");
+        return PTR_ERR(hdr);
+    }
+
+    if (!info->attrs[KSF_MESSAGE_SELECT])
     {
-        .cmd = KSF_LOG_MESSAGE,
-        .policy = ksf_log_message_policy,
-        .doit = ksf_log_message,
-    },
-    // {   .cmd = KSF_GET_SECRET_MESSAGE,
-    //     .policy = ksf_dump_secret_message_policy,
-    //     // .doit = ,
-    //     .dumpit = ksf_dump_secret_message,
-    // },
-};
+        pr_warn("Message didn't have all required attributes.\n");
+        return -1;
+    }
 
-// here is where we will make our genl family
-static struct genl_family ksf_fam = {
-    .name = KSF_GENL_NAME, // This should have us generate and assign a unique id for this family automatically
-    .hdrsize = 0,
-    .n_ops = ARRAY_SIZE(ksf_ops),
-    .maxattr = KSF_ATTR_MAX,
-    .ops = ksf_ops,
-    .pre_doit = ksf_predoit,
-    .post_doit = ksf_postdoit,
-    .module = THIS_MODULE, // Seems like this would basically always be true
-};
+    msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+    if (!msg)
+    {
+        pr_err("No memory for allocating new kernel message.\n");
+        return -ENOMEM;
+    }
+    hdr = genlmsg_put(msg, info->snd_portid, info->snd_seq, &ksf_fam, 0, KSF_MESSAGE_GET);
+    if(!hdr)
+    {
+        pr_err("Failed to create genl header.\n");
+        return -ENOBUFS;
+    }
 
-// static int ksf_dump_secret_message(struct sk_buff *skb, struct genl_info *info) {
-//     void* hdr;
+    message_select = nla_get_u8(attrs[KSF_MESSAGE_SELECT]);
+    switch (message_select)
+    {
+        case KSF_CAR_SECRET: {
+            pr_info("Car Secret Selected\n");
+            nla_put_string(msg, KSF_SECRET_MESSAGE, carSecret);
+            break;
+        }
+        case KSF_COMPUTER_SECRET: {
+            pr_info("Computer Secret Selected\n");
+            nla_put_string(msg, KSF_SECRET_MESSAGE, computerSecret);
+            break;
+        }
+        case KSF_MESSAGE_UNDEF: {
+            pr_err("Undefined value, perhaps the kernelsocketfun module is out of date.");
+            break;
+        }
+        default: {
+            pr_err("Unrecognized value");
+            break;
+        }
+    }
 
-//     char* carSecret = "The car has no wheels...";
-//     char* computerSecret = "The computer has no memory....";
-
-//     hdr = genlmsg_put(skb, info->snd_portid, info->snd_seq, &ksf_fam, 0, KSF_MESSAGE_DUMP);
-//     if(IS_ERR(hdr))
-//     {
-//         pr_err("Failed to create message header.\n");
-//         return PTR_ERR(hdr);
-//     }
-
-//     if (!info->attrs[KSF_MESSAGE_SELECT])
-//     {
-//         pr_warn("Message didn't have all required attributes.\n");
-//         return -1;
-//     }
-
-
-//     if(info->attrs[KSF_MESSAGE_SELECT] == KSF_COMPUTER_SECRET)
-//     {
-//         pr_info("Computer Secret Selected\n");
-//         NLA_PUT_STRING(skb, KSF_SECRET_MESSAGE, computerSecret);
-//     }
-//     else
-//     {
-//         pr_info("Car Secret Selected\n");
-//         NLA_PUT_STRING(skb, KSF_SECRET_MESSAGE, carSecret);
-//     }
-//     return genlmsg_reply(skb, info)
-// }
-
-// static struct genl_multicast_group ksf_multicast_group = {
-//     .name = KSF_GENL_GROUP
-// }
+    pr_info("putting the bow on top of our genlmsg.\n");
+    genlmsg_end(msg, hdr);
+    pr_info("sending the response back up\n");
+    return genlmsg_reply(msg, info);
+}
 
 static int __init ksf_initialize(void) {
-    pr_info("initializing netlink family\n");
     int err;
+    pr_info("initializing netlink family\n");
     err = genl_register_family(&ksf_fam);
     if (err)
     {
